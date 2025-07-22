@@ -60,20 +60,11 @@ jobs:
         make
       working-directory: ${{ github.workspace }} # Убедитесь, что команда 'make' выполняется в корне вашего репозитория
 
-    - name: List Theos Output Directory
-      run: |
-        # Выводим содержимое директории, куда Theos должен был поместить dylib.
-        # Это поможет нам точно определить, где находится файл.
-        echo "Listing contents of .theos/obj/:"
-        ls -laR .theos/obj/ || true # Использование || true предотвратит падение шага, если директория пуста
-      working-directory: ${{ github.workspace }}
-
     - name: Find and Upload dylib Artifact
       uses: actions/upload-artifact@v4
       with:
         name: DobbyIphoneTweak-dylib # Имя артефакта, которое вы сможете скачать
         path: |
-          .theos/obj/*.dylib # Попробуем более общий шаблон
-          .theos/obj/debug/*.dylib # Если он в debug папке
-          .theos/obj/release/*.dylib # Если он в release папке
+          .theos/obj/DobbyIphoneTweak.dylib
+          .theos/obj/arm64/DobbyIphoneTweak.dylib # Добавляем этот путь на всякий случай
         if-no-files-found: error # Завершаем с ошибкой, если .dylib не найден
