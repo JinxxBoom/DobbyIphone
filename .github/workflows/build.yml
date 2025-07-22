@@ -16,25 +16,28 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4 # Скачиваем ваш код из репозитория
 
-    - name: Install Theos
+    - name: Install Theos Dependencies
       run: |
-        # Установка зависимостей, необходимых для Theos
-        brew install dpkg xz lzma coreutils rsync openssh git
+        # Установка зависимостей Homebrew, необходимых для Theos
+        # 'lzma' больше не нужен отдельно, он включен в 'xz'
+        brew install dpkg xz coreutils rsync openssh git
         
-        # Скачиваем Theos
+        # Скачиваем и устанавливаем Theos
         git clone --recursive https://github.com/theos/theos.git /usr/local/theos
+        # Добавляем Theos в переменные окружения для этого рабочего процесса
         echo "THEOS=/usr/local/theos" >> $GITHUB_ENV
         echo "/usr/local/theos/bin" >> $GITHUB_PATH
 
     - name: Configure Theos Environment Variables
       run: |
-        # Важные переменные для Theos
+        # Устанавливаем путь к SDK iOS, который Theos использует для компиляции
         echo "THEOS_SDK_PATH=$(xcode-select -p)/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk" >> $GITHUB_ENV
-        # Можно добавить дополнительные переменные, если они нужны вашему makefile
+        # Примечание: Переменные вроде THEOS_DEVICE_IP не нужны для просто сборки .dylib.
 
-    - name: Prepare Dobby Library
+    - name: Verify Dobby Library Presence
       run: |
-        # Проверяем, что libdobby.a существует по указанному пути
+        # Проверяем, что файл libdobby.a существует в вашем репозитории
+        # по пути, указанному в вашем Makefile.
         if [ ! -f "dobby/universal/libdobby.a" ]; then
           echo "Error: dobby/universal/libdobby.a not found. Please ensure it's in your repository."
           exit 1
@@ -43,16 +46,19 @@ jobs:
 
     - name: Build Tweak (dylib only)
       run: |
-        # Для сборки только .dylib файла, достаточно просто выполнить make
-        # Theos автоматически создаст .dylib в директории .theos/obj/debug/ (или release)
+        # Выполняем команду 'make' для сборки вашего твика.
+        # Theos скомпилирует исходники и создаст .dylib файл
+        # в директории .theos/obj/debug/ (или release/).
         make
-      working-directory: ${{ github.workspace }} # Убедитесь, что команда make выполняется в корне вашего репозитория
+      working-directory: ${{ github.workspace }} # Убедитесь, что команда 'make' выполняется в корне вашего репозитория
 
     - name: Find and Upload dylib Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: DobbyIphoneTweak-dylib # Имя артефакта, используем ваше TWEAK_NAME
+        name: DobbyIphoneTweak-dylib # Имя артефакта, которое вы сможете скачать
         path: |
+          # Theos помещает скомпилированный .dylib сюда.
+          # Убедитесь, что 'DobbyIphoneTweak' соответствует значению TWEAK_NAME в вашем Makefile.
           .theos/obj/debug/DobbyIphoneTweak.dylib
           .theos/obj/release/DobbyIphoneTweak.dylib
-        if-no-files-found: error # Выдавать ошибку, если dylib не найден
+        if-no-files-found: error # Завершаем с ошибкой, если .dylib не найден
