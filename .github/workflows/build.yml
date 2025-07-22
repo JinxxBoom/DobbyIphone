@@ -19,14 +19,33 @@ jobs:
     - name: Select Xcode 15.4
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '15.4' # Указываем конкретную версию Xcode. Попробуй '15.4' или 'latest-stable'
+        xcode-version: '15.4' # Указываем конкретную версию Xcode.
 
     - name: Configure CMake
       run: |
-        # После setup-xcode, xcode-select -p должен указывать на выбранную версию Xcode
-        # И путь к iOS.cmake будет стандартным.
+        # Мы явно задаем путь к Xcode 15.4, основываясь на стандартной установке на GitHub Actions
+        # и стандартном пути к файлу iOS.cmake внутри этой версии.
+        IOS_SDK_PATH="/Applications/Xcode_15.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
+        IOS_TOOLCHAIN_FILE="/Applications/Xcode_15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake"
+
+        # Добавим проверку существования файла перед вызовом CMake
+        if [ ! -f "$IOS_TOOLCHAIN_FILE" ]; then
+          echo "Error: The specified iOS toolchain file does not exist at $IOS_TOOLCHAIN_FILE"
+          echo "Attempting to find it dynamically as a fallback (though it should be fixed by now)."
+          DEVELOPER_DIR=$(xcode-select --print-path)
+          ALTERNATE_IOS_TOOLCHAIN_FILE="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake"
+          if [ -f "$ALTERNATE_IOS_TOOLCHAIN_FILE" ]; then
+            IOS_TOOLCHAIN_FILE="$ALTERNATE_IOS_TOOLCHAIN_FILE"
+            echo "Found toolchain at alternate path: $IOS_TOOLCHAIN_FILE"
+          else
+            echo "Error: Neither standard nor alternate iOS toolchain path found."
+            exit 1
+          fi
+        fi
+
         cmake -S . -B build \
-              -DCMAKE_TOOLCHAIN_FILE=$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake \
+              -DCMAKE_TOOLCHAIN_FILE="${IOS_TOOLCHAIN_FILE}" \
+              -DCMAKE_SYSROOT="${IOS_SDK_PATH}" \
               -G "Xcode"
 
     - name: Build project
