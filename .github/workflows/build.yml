@@ -23,14 +23,13 @@ jobs:
 
     - name: Clone and Setup Theos
       run: |
-        # Клонируем Theos в директорию, к которой у нас есть доступ
-        # Используем /usr/local/Cellar для Theos, это соответствует структуре Homebrew
-        # или вы можете использовать ~/theos, если предпочитаете
-        git clone --recursive https://github.com/theos/theos.git /usr/local/Cellar/theos
+        # Клонируем Theos в домашний каталог пользователя (~/theos).
+        # Это гарантирует, что у пользователя есть права на запись.
+        git clone --recursive https://github.com/theos/theos.git ~/theos
         
         # Устанавливаем переменные окружения для Theos в этом рабочем процессе
-        echo "THEOS=/usr/local/Cellar/theos" >> $GITHUB_ENV
-        echo "/usr/local/Cellar/theos/bin" >> $GITHUB_PATH
+        echo "THEOS=~/theos" >> $GITHUB_ENV
+        echo "$HOME/theos/bin" >> $GITHUB_PATH # Используем $HOME для универсальности
 
     - name: Configure Theos Environment Variables
       run: |
