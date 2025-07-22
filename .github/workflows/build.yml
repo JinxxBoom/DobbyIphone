@@ -1,4 +1,4 @@
-name: Build iOS Dylib with Dobby
+name: Build Theos Tweak
 
 on:
   push:
@@ -10,69 +10,49 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest # Используем последний доступный macOS runner
+    runs-on: macos-latest # Используем macOS, так как Xcode доступен только на ней.
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4 # Скачиваем ваш код из репозитория
 
-    - name: Select Xcode Version
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: '15.4' # Или 'latest-stable' если 15.4 не поможет.
-                              # Можно также попробовать другие версии из списка доступных на GitHub Actions.
-
-    - name: Diagnose Xcode Environment and Find iOS Toolchain
-      id: diagnose_toolchain
+    - name: Install Theos
       run: |
-        echo "--- Listing Xcode contents ---"
-        ls -la /Applications/Xcode_*.app/Contents/Developer/
-        echo "--- Available SDKs ---"
-        xcodebuild -showsdks
-        echo "--- xcode-select -p ---"
-        xcode-select -p
+        # Установка зависимостей, необходимых для Theos
+        brew install dpkg xz lzma coreutils rsync openssh git
+        
+        # Скачиваем Theos
+        git clone --recursive https://github.com/theos/theos.git /usr/local/theos
+        echo "THEOS=/usr/local/theos" >> $GITHUB_ENV
+        echo "/usr/local/theos/bin" >> $GITHUB_PATH
 
-        DEVELOPER_DIR=$(xcode-select -p)
-        echo "DEVELOPER_DIR: $DEVELOPER_DIR"
+    - name: Configure Theos Environment Variables
+      run: |
+        # Важные переменные для Theos
+        echo "THEOS_SDK_PATH=$(xcode-select -p)/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk" >> $GITHUB_ENV
+        # Можно добавить дополнительные переменные, если они нужны вашему makefile
 
-        # Поиск iOS.cmake
-        IOS_CMAKE_FILE=$(find "$DEVELOPER_DIR" -name "iOS.cmake" -print -quit)
-
-        if [ -f "$IOS_CMAKE_FILE" ]; then
-          echo "Found iOS.cmake at: $IOS_CMAKE_FILE"
-          echo "IOS_TOOLCHAIN_FILE=$IOS_CMAKE_FILE" >> "$GITHUB_OUTPUT"
-        else
-          echo "Error: Could not find iOS.cmake anywhere under $DEVELOPER_DIR"
-          echo "Please check Xcode installation or select a different version."
+    - name: Prepare Dobby Library
+      run: |
+        # Проверяем, что libdobby.a существует по указанному пути
+        if [ ! -f "dobby/universal/libdobby.a" ]; then
+          echo "Error: dobby/universal/libdobby.a not found. Please ensure it's in your repository."
           exit 1
         fi
+      working-directory: ${{ github.workspace }}
 
-        # Также нам нужен путь к SDK. Он обычно находится в Platforms/iPhoneOS.platform/Developer/SDKs/
-        # Мы можем получить его из xcodebuild
-        IOS_SDK_PATH=$(xcodebuild -version -sdk iphoneos Path)
-        echo "Found iOS SDK path: $IOS_SDK_PATH"
-        if [ -d "$IOS_SDK_PATH" ]; then
-          echo "IOS_SDK_PATH=$IOS_SDK_PATH" >> "$GITHUB_OUTPUT"
-        else
-          echo "Error: Could not find iOS SDK path: $IOS_SDK_PATH"
-          exit 1
-        fi
-
-
-    - name: Configure CMake
+    - name: Build Tweak (dylib only)
       run: |
-        cmake -S . -B build \
-              -DCMAKE_TOOLCHAIN_FILE="${{ steps.diagnose_toolchain.outputs.IOS_TOOLCHAIN_FILE }}" \
-              -DCMAKE_SYSROOT="${{ steps.diagnose_toolchain.outputs.IOS_SDK_PATH }}" \
-              -G "Xcode"
+        # Для сборки только .dylib файла, достаточно просто выполнить make
+        # Theos автоматически создаст .dylib в директории .theos/obj/debug/ (или release)
+        make
+      working-directory: ${{ github.workspace }} # Убедитесь, что команда make выполняется в корне вашего репозитория
 
-    - name: Build project
-      run: |
-        cmake --build build --config Release
-
-    - name: Find and upload dylib
+    - name: Find and Upload dylib Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: YourProjectDylib
-        path: build/Release/libYourProjectDylib.dylib # Путь к скомпилированной dylib
-        retention-days: 7
+        name: DobbyIphoneTweak-dylib # Имя артефакта, используем ваше TWEAK_NAME
+        path: |
+          .theos/obj/debug/DobbyIphoneTweak.dylib
+          .theos/obj/release/DobbyIphoneTweak.dylib
+        if-no-files-found: error # Выдавать ошибку, если dylib не найден
