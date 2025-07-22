@@ -20,6 +20,9 @@ jobs:
       run: |
         # Установка зависимостей Homebrew, необходимых для Theos
         brew install dpkg xz coreutils rsync openssh git
+        # Устанавливаем 'ldid' - необходим для подписи dylib Theos'ом
+        # ldid часто является частью brew install libimobiledevice или отдельного пакета
+        brew install ldid
 
     - name: Clone and Setup Theos
       run: |
@@ -29,7 +32,7 @@ jobs:
         
         # Устанавливаем переменные окружения для Theos в этом рабочем процессе
         echo "THEOS=~/theos" >> $GITHUB_ENV
-        echo "$HOME/theos/bin" >> $GITHUB_PATH # Используем $HOME для универсальности
+        echo "$HOME/theos/bin" >> $GITHUB_PATH
 
     - name: Configure Theos Environment Variables
       run: |
@@ -37,10 +40,14 @@ jobs:
         echo "THEOS_SDK_PATH=$(xcode-select -p)/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk" >> $GITHUB_ENV
         # Примечание: Переменные вроде THEOS_DEVICE_IP не нужны для просто сборки .dylib.
 
-    - name: Verify Dobby Library Presence
+    - name: Verify Project Files Presence
       run: |
-        # Проверяем, что файл libdobby.a существует в вашем репозитории
-        # по пути, указанному в вашем Makefile.
+        # Проверяем, что main.mm существует в корне репозитория
+        if [ ! -f "main.mm" ]; then
+          echo "Error: main.mm not found in the repository root. Please ensure it's there."
+          exit 1
+        fi
+        # Проверяем, что libdobby.a существует по указанному пути
         if [ ! -f "dobby/universal/libdobby.a" ]; then
           echo "Error: dobby/universal/libdobby.a not found. Please ensure it's in your repository."
           exit 1
