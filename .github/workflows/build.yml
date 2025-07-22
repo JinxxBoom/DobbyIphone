@@ -3,54 +3,39 @@ name: Build iOS Dylib with Dobby
 on:
   push:
     branches:
-      - main # Запускать при пуше в ветку main
+      - main
   pull_request:
     branches:
-      - main # Запускать при Pull Request'ах в ветку main
+      - main
 
 jobs:
   build:
-    runs-on: macos-latest # Для сборки iOS требуется macOS Runner
+    runs-on: macos-latest # Используем последний доступный macOS runner
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4 # Получаем код из репозитория
+      uses: actions/checkout@v4
 
-    - name: Get Developer Directory and iOS Toolchain Path
-      id: get_toolchain
-      run: |
-        DEVELOPER_DIR=$(xcode-select --print-path)
-        
-        # Проверяем два наиболее распространенных пути к файлу iOS.cmake
-        IOS_TOOLCHAIN_FILE_PATH_1="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake"
-        IOS_TOOLCHAIN_FILE_PATH_2="$DEVELOPER_DIR/Platforms/iPhoneOS.platform/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake"
-        
-        if [ -f "$IOS_TOOLCHAIN_FILE_PATH_1" ]; then
-          echo "iOS_TOOLCHAIN_FILE=$IOS_TOOLCHAIN_FILE_PATH_1" >> "$GITHUB_OUTPUT"
-          echo "Found toolchain at: $IOS_TOOLCHAIN_FILE_PATH_1"
-        elif [ -f "$IOS_TOOLCHAIN_FILE_PATH_2" ]; then
-          echo "iOS_TOOLCHAIN_FILE=$IOS_TOOLCHAIN_FILE_PATH_2" >> "$GITHUB_OUTPUT"
-          echo "Found toolchain at: $IOS_TOOLCHAIN_FILE_PATH_2"
-        else
-          echo "Error: iOS toolchain file not found at expected paths."
-          echo "Checked paths:"
-          echo "- $IOS_TOOLCHAIN_FILE_PATH_1"
-          echo "- $IOS_TOOLCHAIN_FILE_PATH_2"
-          exit 1
-        fi
+    - name: Select Xcode 15.4
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '15.4' # Указываем конкретную версию Xcode. Попробуй '15.4' или 'latest-stable'
 
     - name: Configure CMake
       run: |
-        cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="${{ steps.get_toolchain.outputs.iOS_TOOLCHAIN_FILE }}" -G "Xcode"
+        # После setup-xcode, xcode-select -p должен указывать на выбранную версию Xcode
+        # И путь к iOS.cmake будет стандартным.
+        cmake -S . -B build \
+              -DCMAKE_TOOLCHAIN_FILE=$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake \
+              -G "Xcode"
 
     - name: Build project
       run: |
-        # Собираем проект с помощью Xcodebuild через CMake
         cmake --build build --config Release
 
     - name: Find and upload dylib
       uses: actions/upload-artifact@v4
       with:
         name: YourProjectDylib
-        path: build/Release/libYourProjectDylib.dylib # Путь к скомпилированной dylib
+        path: build/Release/libYourProjectDylib.dylib
         retention-days: 7
