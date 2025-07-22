@@ -16,36 +16,54 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Select Xcode 15.4
+    - name: Select Xcode Version
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '15.4' # Указываем конкретную версию Xcode.
+        xcode-version: '15.4' # Или 'latest-stable' если 15.4 не поможет.
+                              # Можно также попробовать другие версии из списка доступных на GitHub Actions.
+
+    - name: Diagnose Xcode Environment and Find iOS Toolchain
+      id: diagnose_toolchain
+      run: |
+        echo "--- Listing Xcode contents ---"
+        ls -la /Applications/Xcode_*.app/Contents/Developer/
+        echo "--- Available SDKs ---"
+        xcodebuild -showsdks
+        echo "--- xcode-select -p ---"
+        xcode-select -p
+
+        DEVELOPER_DIR=$(xcode-select -p)
+        echo "DEVELOPER_DIR: $DEVELOPER_DIR"
+
+        # Поиск iOS.cmake
+        IOS_CMAKE_FILE=$(find "$DEVELOPER_DIR" -name "iOS.cmake" -print -quit)
+
+        if [ -f "$IOS_CMAKE_FILE" ]; then
+          echo "Found iOS.cmake at: $IOS_CMAKE_FILE"
+          echo "IOS_TOOLCHAIN_FILE=$IOS_CMAKE_FILE" >> "$GITHUB_OUTPUT"
+        else
+          echo "Error: Could not find iOS.cmake anywhere under $DEVELOPER_DIR"
+          echo "Please check Xcode installation or select a different version."
+          exit 1
+        fi
+
+        # Также нам нужен путь к SDK. Он обычно находится в Platforms/iPhoneOS.platform/Developer/SDKs/
+        # Мы можем получить его из xcodebuild
+        IOS_SDK_PATH=$(xcodebuild -version -sdk iphoneos Path)
+        echo "Found iOS SDK path: $IOS_SDK_PATH"
+        if [ -d "$IOS_SDK_PATH" ]; then
+          echo "IOS_SDK_PATH=$IOS_SDK_PATH" >> "$GITHUB_OUTPUT"
+        else
+          echo "Error: Could not find iOS SDK path: $IOS_SDK_PATH"
+          exit 1
+        fi
+
 
     - name: Configure CMake
       run: |
-        # Мы явно задаем путь к Xcode 15.4, основываясь на стандартной установке на GitHub Actions
-        # и стандартном пути к файлу iOS.cmake внутри этой версии.
-        IOS_SDK_PATH="/Applications/Xcode_15.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
-        IOS_TOOLCHAIN_FILE="/Applications/Xcode_15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake"
-
-        # Добавим проверку существования файла перед вызовом CMake
-        if [ ! -f "$IOS_TOOLCHAIN_FILE" ]; then
-          echo "Error: The specified iOS toolchain file does not exist at $IOS_TOOLCHAIN_FILE"
-          echo "Attempting to find it dynamically as a fallback (though it should be fixed by now)."
-          DEVELOPER_DIR=$(xcode-select --print-path)
-          ALTERNATE_IOS_TOOLCHAIN_FILE="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake"
-          if [ -f "$ALTERNATE_IOS_TOOLCHAIN_FILE" ]; then
-            IOS_TOOLCHAIN_FILE="$ALTERNATE_IOS_TOOLCHAIN_FILE"
-            echo "Found toolchain at alternate path: $IOS_TOOLCHAIN_FILE"
-          else
-            echo "Error: Neither standard nor alternate iOS toolchain path found."
-            exit 1
-          fi
-        fi
-
         cmake -S . -B build \
-              -DCMAKE_TOOLCHAIN_FILE="${IOS_TOOLCHAIN_FILE}" \
-              -DCMAKE_SYSROOT="${IOS_SDK_PATH}" \
+              -DCMAKE_TOOLCHAIN_FILE="${{ steps.diagnose_toolchain.outputs.IOS_TOOLCHAIN_FILE }}" \
+              -DCMAKE_SYSROOT="${{ steps.diagnose_toolchain.outputs.IOS_SDK_PATH }}" \
               -G "Xcode"
 
     - name: Build project
@@ -56,5 +74,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: YourProjectDylib
-        path: build/Release/libYourProjectDylib.dylib
+        path: build/Release/libYourProjectDylib.dylib # Путь к скомпилированной dylib
         retention-days: 7
