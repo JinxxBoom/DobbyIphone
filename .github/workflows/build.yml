@@ -1,0 +1,34 @@
+name: Build iOS Dylib with Dobby
+
+on:
+  push:
+    branches:
+      - main # Запускать при пуше в ветку main
+  pull_request:
+    branches:
+      - main # Запускать при Pull Request'ах в ветку main
+
+jobs:
+  build:
+    runs-on: macos-latest # Для сборки iOS требуется macOS Runner
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4 # Получаем код из репозитория
+
+    - name: Configure CMake
+      run: |
+        cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/share/cmake/Modules/Platform/iOS.cmake -G "Xcode"
+
+    - name: Build project
+      run: |
+        # Собираем проект с помощью Xcodebuild
+        # Обрати внимание на --config Release, чтобы собрать релизную версию
+        cmake --build build --config Release
+
+    - name: Find and upload dylib
+      uses: actions/upload-artifact@v4
+      with:
+        name: YourProjectDylib
+        path: build/Release/libYourProjectDylib.dylib # Путь к скомпилированной dylib
+        retention-days: 7
